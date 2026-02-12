@@ -1,12 +1,23 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-    /omit-if-no-ref/ zip_rotate_plane: zip_rotate_plane {
-        compatible = "zmk,input-processor-report-rate-limit";
-        device-name = "global";
+    /omit-if-no-ref/ zip_rotate_pointer: zip_rotate_pointer {
+        compatible = "zmk,input-processor-rotate-plane";
+        device-name = "pointer";
         #input-processor-cells = <0>;
         type = <INPUT_EV_REL>;
-        codes = <INPUT_REL_X INPUT_REL_Y INPUT_REL_WHEEL INPUT_REL_HWHEEL>;
-        angle = <180>;
+        codes = <INPUT_REL_X INPUT_REL_Y>;
+        angle = <0>;
+        timeout = <8>;
+    };
+
+    /omit-if-no-ref/ zip_rotate_scroll: zip_rotate_scroll {
+        compatible = "zmk,input-processor-rotate-plane";
+        device-name = "scroll";
+        #input-processor-cells = <0>;
+        type = <INPUT_EV_REL>;
+        codes = <INPUT_REL_WHEEL INPUT_REL_HWHEEL>;
+        angle = <0>;
+        timeout = <16>;
     };
 };

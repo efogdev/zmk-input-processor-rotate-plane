@@ -14,3 +14,9 @@ properties:
   angle:
     type: int
     required: true
+  timeout:
+    type: int
+    required: true
+  device-name:
+    type: string
+    required: true
