@@ -1,0 +1,1 @@
+target_sources_ifdef(CONFIG_ZMK_ROTATE_PLANE_SHELL app PRIVATE rp_shell.c)

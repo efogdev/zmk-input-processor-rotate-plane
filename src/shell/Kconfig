@@ -1,0 +1,7 @@
+if SHELL
+
+config ZMK_ROTATE_PLANE_SHELL
+bool "Plane rotator shell commands"
+default y
+
+endif
