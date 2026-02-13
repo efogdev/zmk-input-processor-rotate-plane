@@ -32,7 +32,7 @@ int rp_list_devices(char ***names);
  * @param angle Pointer to store angle value
  * @return 0 on success, negative error code
  */
-int rp_get_angle_by_name(const char *name, uint8_t *angle);
+int rp_get_angle_by_name(const char *name, int16_t *angle);
 
 /**
  * @brief Set angle for a device by name
@@ -41,6 +41,6 @@ int rp_get_angle_by_name(const char *name, uint8_t *angle);
  * @param angle Angle value to set
  * @return 0 on success, negative error code
  */
-int rp_set_angle_by_name(const char *name, uint8_t angle);
+int rp_set_angle_by_name(const char *name, int16_t angle);
 
 #endif /* ZMK_INPUT_PROCESSOR_ROTATE_PLANE_H */

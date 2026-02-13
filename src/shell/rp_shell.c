@@ -32,7 +32,7 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv) {
             shprint(sh, "  %s (not found)", names[i]);
             continue;
         }
-        uint8_t angle = 0;
+        int16_t angle = 0;
         rp_get_angle_by_name(names[i], &angle);
         shprint(sh, "  %s (angle: %d)", names[i], angle);
     }
@@ -41,13 +41,13 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv) {
     return 0;
 }
 
-static int cmd_get(const struct shell *sh, size_t argc, char **argv) {
+static int cmd_get(const struct shell *sh, const size_t argc, char **argv) {
     if (argc < 2) {
         shprint(sh, "Usage: plane get <name>");
         return -EINVAL;
     }
 
-    uint8_t angle = 0;
+    int16_t angle = 0;
     const int ret = rp_get_angle_by_name(argv[1], &angle);
     if (ret != 0) {
         shprint(sh, "Device not found.");
@@ -58,13 +58,13 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv) {
     return 0;
 }
 
-static int cmd_set(const struct shell *sh, size_t argc, char **argv) {
+static int cmd_set(const struct shell *sh, const size_t argc, char **argv) {
     if (argc < 3) {
         shprint(sh, "Usage: plane set <name> <angle>");
         return -EINVAL;
     }
 
-    uint8_t angle = (uint8_t)atoi(argv[2]);
+    const int16_t angle = (int16_t) atoi(argv[2]);
     const int ret = rp_set_angle_by_name(argv[1], angle);
     if (ret != 0) {
         shprint(sh, "Device not found.");

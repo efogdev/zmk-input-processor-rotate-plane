@@ -32,8 +32,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define RP_NVS_PREFIX "zip_rp"
 
 struct zip_rp_config {
-    uint8_t angle, timeout;
-    uint8_t type;
+    int16_t angle;
+    uint8_t type, timeout;
     const char *device_name;
     size_t codes_len;
     uint16_t codes[];
@@ -153,16 +153,16 @@ static struct zmk_input_processor_driver_api sy_driver_api = {
     .handle_event = zip_rp_handle_event,
 };
 
-static void zip_rp_update_angle(const struct device *dev, const uint8_t new_angle) {
+static void zip_rp_update_angle(const struct device *dev, const int16_t new_angle) {
     struct zip_rp_data *data = dev->data;
     const float angle_rad = (new_angle * M_PI) / 180.0f;
     data->cos_angle = cosf(angle_rad);
     data->sin_angle = sinf(angle_rad);
 }
 
-static int save_angle_to_nvs(const struct device *dev, const uint8_t angle) {
+static int save_angle_to_nvs(const struct device *dev, const int16_t angle) {
     const struct zip_rp_config *config = dev->config;
-    char setting_name[64];
+    char setting_name[32];
     snprintf(setting_name, sizeof(setting_name), "%s/%s", RP_NVS_PREFIX, config->device_name);
 
     const int rc = settings_save_one(setting_name, &angle, sizeof(angle));
@@ -217,7 +217,7 @@ int rp_list_devices(char ***names) {
     return num_dev;
 }
 
-int rp_get_angle_by_name(const char *name, uint8_t *angle) {
+int rp_get_angle_by_name(const char *name, int16_t *angle) {
     const struct device *dev = rp_device_by_name(name);
     if (dev == NULL) {
         return -EINVAL;
@@ -228,14 +228,14 @@ int rp_get_angle_by_name(const char *name, uint8_t *angle) {
     return 0;
 }
 
-int rp_set_angle_by_name(const char *name, const uint8_t angle) {
+int rp_set_angle_by_name(const char *name, const int16_t angle) {
     const struct device *dev = rp_device_by_name(name);
     if (dev == NULL) {
         return -EINVAL;
     }
 
     struct zip_rp_config *config = (struct zip_rp_config *)dev->config;
-    uint8_t old_angle = config->angle;
+    int16_t old_angle = config->angle;
     config->angle = angle;
     zip_rp_update_angle(dev, angle);
 
@@ -310,7 +310,7 @@ static int zip_rp_settings_load_cb(const char *name, size_t len, settings_read_c
         return -EINVAL;
     }
 
-    uint8_t angle = 0;
+    int16_t angle = 0;
     const int err = read_cb(cb_arg, &angle, sizeof(angle));
     if (err < 0) {
         LOG_ERR("Failed to load settings (err = %d)", err);
