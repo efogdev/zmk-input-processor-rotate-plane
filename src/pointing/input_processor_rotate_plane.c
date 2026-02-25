@@ -43,7 +43,7 @@ struct zip_rp_data {
     float cos_angle;
     float sin_angle;
     int32_t pending_values[MAX_LEN];
-    bool has_pending[MAX_LEN];
+    float remainders[MAX_LEN];
     struct k_work_delayable timeout_work;
     const struct device *dev;
 };
@@ -55,25 +55,27 @@ static void zip_rp_apply_rotation(const struct device *dev) {
     const struct zip_rp_config *cfg = dev->config;
     struct zip_rp_data *data = dev->data;
 
-    const int32_t x_val = data->has_pending[0] ? data->pending_values[0] : 0;
-    const int32_t y_val = data->has_pending[1] ? data->pending_values[1] : 0;
+    const float x_val = (float)(data->pending_values[0] ? data->pending_values[0] : 0) + data->remainders[0];
+    const float y_val = (float)(data->pending_values[1] ? data->pending_values[1] : 0) + data->remainders[1];
 
-    const int32_t rotated_x = (int32_t) (x_val * data->cos_angle - y_val * data->sin_angle);
-    const int32_t rotated_y = (int32_t) (x_val * data->sin_angle + y_val * data->cos_angle);
+    const float rotated_x_raw = x_val * data->cos_angle - y_val * data->sin_angle;
+    const float rotated_y_raw = x_val * data->sin_angle + y_val * data->cos_angle;
 
-    data->pending_values[0] = rotated_x;
-    data->pending_values[1] = rotated_y;
+    data->pending_values[0] = (int32_t) rotated_x_raw;
+    data->remainders[0] = rotated_x_raw - (float)data->pending_values[0];
 
-    data->has_pending[0] = rotated_x != 0;
-    data->has_pending[1] = rotated_y != 0;
+    data->pending_values[1] = (int32_t) rotated_y_raw;
+    data->remainders[1] = rotated_y_raw - (float)data->pending_values[1];
+    
+    LOG_DBG("Applied rotation, values released");
 }
 
 static void report_values(const struct device *dev) {
     const struct zip_rp_config *cfg = dev->config;
     struct zip_rp_data *data = dev->data;
 
-    const bool has_x = data->has_pending[0];
-    const bool has_y = data->has_pending[1];
+    const bool has_x = data->pending_values[0];
+    const bool has_y = data->pending_values[1];
 
     if (has_x) {
         input_report(dev, cfg->type, cfg->codes[0], data->pending_values[0], !has_y, K_NO_WAIT);
@@ -84,7 +86,6 @@ static void report_values(const struct device *dev) {
     }
 
     for (int i = 0; i < cfg->codes_len; i++) {
-        data->has_pending[i] = false;
         data->pending_values[i] = 0;
     }
 }
@@ -125,11 +126,10 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
     }
 
     data->pending_values[code_index] += event->value;
-    data->has_pending[code_index] = true;
 
     bool all_present = true;
     for (int i = 0; i < cfg->codes_len; i++) {
-        if (!data->has_pending[i]) {
+        if (!data->pending_values[i]) {
             all_present = false;
             break;
         }
@@ -235,7 +235,6 @@ int rp_set_angle_by_name(const char *name, const int16_t angle) {
     }
 
     struct zip_rp_config *config = (struct zip_rp_config *)dev->config;
-    int16_t old_angle = config->angle;
     config->angle = angle;
     zip_rp_update_angle(dev, angle);
 
@@ -243,7 +242,7 @@ int rp_set_angle_by_name(const char *name, const int16_t angle) {
     snprintf(value, sizeof(value), "%d", angle);
     save_angle_to_nvs(dev, angle);
 
-    LOG_DBG("Set angle for %s: %d → %d", name, old_angle, angle);
+    LOG_DBG("Set angle for %s: %d → %d", name, config->angle, angle);
     return 0;
 }
 
@@ -260,7 +259,7 @@ static int zip_rp_init(const struct device *dev) {
 
     for (int i = 0; i < MAX_LEN; i++) {
         data->pending_values[i] = 0;
-        data->has_pending[i] = false;
+        data->remainders[i] = 0.0f;
     }
 
     for (uint8_t i = 0; i < num_dev; i++) {
