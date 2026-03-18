@@ -39,7 +39,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 struct zip_rp_config {
     int16_t angle;
-    uint8_t type, timeout;
+    uint8_t type, sync_window;
     const char *device_name;
     size_t codes_len;
     uint16_t codes[];
@@ -49,6 +49,7 @@ struct zip_rp_data {
     float cos_angle;
     float sin_angle;
     int32_t pending_values[MAX_LEN];
+    uint32_t last_rpt;
     float remainders[MAX_LEN];
     struct k_work_delayable timeout_work;
     const struct device *dev;
@@ -79,6 +80,7 @@ static void zip_rp_apply_rotation(const struct device *dev) {
 static void report_values(const struct device *dev) {
     const struct zip_rp_config *cfg = dev->config;
     struct zip_rp_data *data = dev->data;
+    const uint32_t now = k_uptime_get_32();
 
     const bool has_x = data->pending_values[0];
     const bool has_y = data->pending_values[1];
@@ -94,6 +96,8 @@ static void report_values(const struct device *dev) {
     for (int i = 0; i < cfg->codes_len; i++) {
         data->pending_values[i] = 0;
     }
+
+    data->last_rpt = now;
 }
 
 static void zip_rp_timeout_handler(struct k_work *work) {
@@ -110,6 +114,7 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
                                 struct zmk_input_processor_state *state) {
     const struct zip_rp_config *cfg = dev->config;
     struct zip_rp_data *data = dev->data;
+    const uint32_t now = k_uptime_get_32();
 
     if (cfg->angle == 0) {
         return ZMK_INPUT_PROC_CONTINUE;
@@ -132,6 +137,13 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
     }
 
     data->pending_values[code_index] += event->value;
+    if (now - data->last_rpt < cfg->sync_window) {
+        k_work_cancel_delayable(&data->timeout_work);
+        k_work_reschedule(&data->timeout_work, K_MSEC(ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS)));
+        return ZMK_INPUT_PROC_STOP;
+    }
+
+    k_work_cancel_delayable(&data->timeout_work);
 
     bool all_present = true;
     for (int i = 0; i < cfg->codes_len; i++) {
@@ -142,17 +154,13 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
     }
 
     if (all_present) {
-        k_work_cancel_delayable(&data->timeout_work);
         zip_rp_apply_rotation(dev);
         report_values(dev);
-
-        event->value = 0;
-        return ZMK_INPUT_PROC_CONTINUE;
+        return ZMK_INPUT_PROC_STOP;
     }
 
-    event->value = 0;
     k_work_reschedule(&data->timeout_work, K_MSEC(ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS)));
-    return ZMK_INPUT_PROC_CONTINUE;
+    return ZMK_INPUT_PROC_STOP;
 }
 
 static struct zmk_input_processor_driver_api sy_driver_api = {
@@ -297,7 +305,7 @@ static int zip_rp_init(const struct device *dev) {
     static struct zip_rp_config config_##n = {                                                \
         .type = DT_INST_PROP_OR(n, type, INPUT_EV_REL),                                        \
         .angle = DT_INST_PROP(n, angle),                                                       \
-        .timeout = DT_INST_PROP(n, timeout),                                                  \
+        .sync_window = DT_INST_PROP(n, sync_window),                                                       \
         .codes_len = DT_INST_PROP_LEN(n, codes),                                              \
         .device_name = DT_INST_PROP_OR(n, device_name, "unknown"),                             \
         .codes = DT_INST_PROP(n, codes),                                                       \

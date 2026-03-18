@@ -8,7 +8,7 @@
         type = <INPUT_EV_REL>;
         codes = <INPUT_REL_X INPUT_REL_Y>;
         angle = <0>;
-        timeout = <8>;
+        sync-window = <2>;
     };
 
     /omit-if-no-ref/ zip_rotate_scroll: zip_rotate_scroll {
@@ -18,6 +18,6 @@
         type = <INPUT_EV_REL>;
         codes = <INPUT_REL_WHEEL INPUT_REL_HWHEEL>;
         angle = <0>;
-        timeout = <16>;
+        sync-window = <4>;
     };
 };

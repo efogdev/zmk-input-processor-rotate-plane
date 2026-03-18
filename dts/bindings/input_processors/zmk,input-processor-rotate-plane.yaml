@@ -14,7 +14,7 @@ properties:
   angle:
     type: int
     required: true
-  timeout:
+  sync-window:
     type: int
     required: true
   device-name:

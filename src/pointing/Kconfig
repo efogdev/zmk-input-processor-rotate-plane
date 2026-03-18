@@ -11,7 +11,7 @@ if ZMK_INPUT_PROCESSOR_ROTATE_PLANE
 
 config ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS
 int "Timeout in milliseconds to wait for paired axis event"
-default 16
+default 1
 help
   Time to wait for the second axis event before assuming it's 0.
   If only one axis event is received within this timeout, the other
