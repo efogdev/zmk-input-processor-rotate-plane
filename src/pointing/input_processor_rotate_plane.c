@@ -25,6 +25,12 @@
 #include <zmk/keymap.h>
 #include <math.h>
 
+#if IS_ENABLED(CONFIG_ZMK_RUNTIME_CONFIG)
+#include <zmk_runtime_config/runtime_config.h>
+#else
+#define ZRC_GET(key, default_val) (default_val)
+#endif
+
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #define M_PI 3.14159265358979323846
@@ -145,7 +151,7 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
     }
 
     event->value = 0;
-    k_work_reschedule(&data->timeout_work, K_MSEC(cfg->timeout));
+    k_work_reschedule(&data->timeout_work, K_MSEC(ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS)));
     return ZMK_INPUT_PROC_CONTINUE;
 }
 
@@ -300,6 +306,14 @@ static int zip_rp_init(const struct device *dev) {
                           CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &sy_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(RP_INST)
+
+#if IS_ENABLED(CONFIG_ZMK_RUNTIME_CONFIG)
+static int zip_rp_register_runtime_params(void) {
+    zrc_register("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS, 1, 1000);
+    return 0;
+}
+SYS_INIT(zip_rp_register_runtime_params, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+#endif /* CONFIG_ZMK_RUNTIME_CONFIG */
 
 #if IS_ENABLED(CONFIG_SETTINGS)
 // ReSharper disable once CppParameterMayBeConst
