@@ -84,11 +84,11 @@ static void report_values(const struct device *dev) {
     const bool has_x = data->pending_values[0];
     const bool has_y = data->pending_values[1];
 
-    if (has_x) {
-        input_report(dev, cfg->type, cfg->codes[0], data->pending_values[0], !has_y, K_NO_WAIT);
+    if (has_x && cfg->codes_len > 0) {
+        input_report(dev, cfg->type, cfg->codes[0], data->pending_values[0], !has_y || cfg->codes_len < 2, K_NO_WAIT);
     }
 
-    if (has_y) {
+    if (has_y && cfg->codes_len > 1) {
         input_report(dev, cfg->type, cfg->codes[1], data->pending_values[1], true, K_NO_WAIT);
     }
 
@@ -224,6 +224,14 @@ int rp_list_devices(char ***names) {
 
         const struct zip_rp_config *config = devices[i]->config;
         collected[i] = strdup(config->device_name);
+        if (collected[i] == NULL) {
+            for (uint8_t j = 0; j < i; j++) {
+                free(collected[j]);
+            }
+            free(collected);
+            *names = NULL;
+            return -ENOMEM;
+        }
     }
 
     *names = collected;
@@ -316,7 +324,7 @@ DT_INST_FOREACH_STATUS_OKAY(RP_INST)
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_CONFIG)
 static int zip_rp_register_runtime_params(void) {
-    zrc_register("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS, 1, 1000);
+    zrc_register("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS, 1, 64);
     return 0;
 }
 SYS_INIT(zip_rp_register_runtime_params, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

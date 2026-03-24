@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/shell/shell.h>
@@ -64,7 +65,13 @@ static int cmd_set(const struct shell *sh, const size_t argc, char **argv) {
         return -EINVAL;
     }
 
-    const int16_t angle = (int16_t) atoi(argv[2]);
+    char *endptr;
+    long raw_angle = strtol(argv[2], &endptr, 10);
+    if (endptr == argv[2] || *endptr != '\0' || raw_angle < INT16_MIN || raw_angle > INT16_MAX) {
+        shprint(sh, "Error: angle must be -32768 to 32767");
+        return -EINVAL;
+    }
+    const int16_t angle = (int16_t)raw_angle;
     const int ret = rp_set_angle_by_name(argv[1], angle);
     if (ret != 0) {
         shprint(sh, "Device not found.");
