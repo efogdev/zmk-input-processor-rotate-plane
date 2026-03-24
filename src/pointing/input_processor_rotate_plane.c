@@ -59,7 +59,6 @@ static const struct device *devices[DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT)];
 static uint8_t num_dev = 0;
 
 static void zip_rp_apply_rotation(const struct device *dev) {
-    const struct zip_rp_config *cfg = dev->config;
     struct zip_rp_data *data = dev->data;
 
     const float x_val = (float)(data->pending_values[0] ? data->pending_values[0] : 0) + data->remainders[0];
