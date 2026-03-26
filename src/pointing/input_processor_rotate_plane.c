@@ -61,8 +61,8 @@ static uint8_t num_dev = 0;
 static void zip_rp_apply_rotation(const struct device *dev) {
     struct zip_rp_data *data = dev->data;
 
-    const float x_val = (float)(data->pending_values[0] ? data->pending_values[0] : 0) + data->remainders[0];
-    const float y_val = (float)(data->pending_values[1] ? data->pending_values[1] : 0) + data->remainders[1];
+    const float x_val = (float)data->pending_values[0] + data->remainders[0];
+    const float y_val = (float)data->pending_values[1] + data->remainders[1];
 
     const float rotated_x_raw = x_val * data->cos_angle - y_val * data->sin_angle;
     const float rotated_y_raw = x_val * data->sin_angle + y_val * data->cos_angle;
