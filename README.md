@@ -1,6 +1,6 @@
 # ZMK Input Processor - Rotate Plane
 
-Rotates pointer or scroll input by a configurable angle. Corrects axis orientation when a trackball or touchpad is mounted at an angle relative to the keyboard.
+Rotates pointer or scroll input by a configurable angle. 
 
 ## Usage
 
@@ -24,6 +24,17 @@ Then add it to your input listener:
         input-processors = <&zip_rotate_pointer>;
     };
 };
+```
+
+And define the output node:
+
+```dts
+/ {
+    rotated_pointer_plane {
+        compatible = "zmk,input-listener";
+        device = <&zip_rotate_pointer>;
+    };
+}
 ```
 
 `zip_rotate_pointer` handles `INPUT_REL_X` / `INPUT_REL_Y`. `zip_rotate_scroll` handles `INPUT_REL_WHEEL` / `INPUT_REL_HWHEEL`. Both default to `angle = <0>`.
