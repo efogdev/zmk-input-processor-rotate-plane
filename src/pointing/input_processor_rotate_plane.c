@@ -259,8 +259,6 @@ int rp_set_angle_by_name(const char *name, const int16_t angle) {
     config->angle = angle;
     zip_rp_update_angle(dev, angle);
 
-    char value[4];
-    snprintf(value, sizeof(value), "%d", angle);
     save_angle_to_nvs(dev, angle);
 
     LOG_DBG("Set angle for %s: %d → %d", name, config->angle, angle);
