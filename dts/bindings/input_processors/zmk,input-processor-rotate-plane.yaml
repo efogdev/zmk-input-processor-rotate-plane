@@ -16,7 +16,7 @@ properties:
     required: true
   sync-window:
     type: int
-    required: true
+    deprecated: true
   device-name:
     type: string
     required: true

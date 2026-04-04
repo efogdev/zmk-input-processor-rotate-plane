@@ -39,7 +39,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 struct zip_rp_config {
     int16_t angle;
-    uint8_t type, sync_window;
+    uint8_t type;
     const char *device_name;
     size_t codes_len;
     uint16_t codes[];
@@ -136,9 +136,11 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
     }
 
     data->pending_values[code_index] += event->value;
-    if (now - data->last_rpt < cfg->sync_window) {
+
+    const uint16_t timeout_ms = ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS);
+    if (now - data->last_rpt < timeout_ms) {
         k_work_cancel_delayable(&data->timeout_work);
-        k_work_reschedule(&data->timeout_work, K_MSEC(ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS)));
+        k_work_reschedule(&data->timeout_work, K_MSEC(timeout_ms));
         return ZMK_INPUT_PROC_STOP;
     }
 
@@ -158,7 +160,7 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
         return ZMK_INPUT_PROC_STOP;
     }
 
-    k_work_reschedule(&data->timeout_work, K_MSEC(ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS)));
+    k_work_reschedule(&data->timeout_work, K_MSEC(timeout_ms));
     return ZMK_INPUT_PROC_STOP;
 }
 
@@ -310,7 +312,6 @@ static int zip_rp_init(const struct device *dev) {
     static struct zip_rp_config config_##n = {                                                \
         .type = DT_INST_PROP_OR(n, type, INPUT_EV_REL),                                        \
         .angle = DT_INST_PROP(n, angle),                                                       \
-        .sync_window = DT_INST_PROP(n, sync_window),                                                       \
         .codes_len = DT_INST_PROP_LEN(n, codes),                                              \
         .device_name = DT_INST_PROP_OR(n, device_name, "unknown"),                             \
         .codes = DT_INST_PROP(n, codes),                                                       \
