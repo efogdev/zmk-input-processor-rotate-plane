@@ -38,6 +38,11 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv) {
         shprint(sh, "  %s (angle: %d)", names[i], angle);
     }
 
+    for (int i = 0; i < available; i++) {
+        free(names[i]);
+    }
+    free(names);
+
     shprint(sh, "");
     return 0;
 }
