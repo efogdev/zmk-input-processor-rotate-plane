@@ -34,7 +34,7 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #define M_PI 3.14159265358979323846f
-#define MAX_LEN 2
+#define MAX_LEN 4
 #define RP_NVS_PREFIX "zip_rp"
 
 struct zip_rp_config {
@@ -49,7 +49,7 @@ struct zip_rp_data {
     float cos_angle;
     float sin_angle;
     int32_t pending_values[MAX_LEN];
-    uint32_t last_rpt;
+    uint32_t last_rpt[MAX_LEN / 2];
     float remainders[MAX_LEN];
     struct k_work_delayable timeout_work;
     const struct device *dev;
@@ -58,45 +58,67 @@ struct zip_rp_data {
 static const struct device *devices[DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT)];
 static uint8_t num_dev = 0;
 
-static void zip_rp_apply_rotation(const struct device *dev) {
-    struct zip_rp_data *data = dev->data;
-
-    const float x_val = (float)data->pending_values[0] + data->remainders[0];
-    const float y_val = (float)data->pending_values[1] + data->remainders[1];
-
-    const float rotated_x_raw = x_val * data->cos_angle - y_val * data->sin_angle;
-    const float rotated_y_raw = x_val * data->sin_angle + y_val * data->cos_angle;
-
-    data->pending_values[0] = (int32_t) rotated_x_raw;
-    data->remainders[0] = rotated_x_raw - (float)data->pending_values[0];
-
-    data->pending_values[1] = (int32_t) rotated_y_raw;
-    data->remainders[1] = rotated_y_raw - (float)data->pending_values[1];
-    
-    LOG_DBG("Applied rotation, values released");
-}
-
-static void report_values(const struct device *dev) {
+static int8_t pair_ready(const struct device *dev, const int8_t start) {
     const struct zip_rp_config *cfg = dev->config;
-    struct zip_rp_data *data = dev->data;
+    const struct zip_rp_data *data = dev->data;
+    const uint16_t timeout_ms = ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS);
     const uint32_t now = k_uptime_get_32();
 
-    const bool has_x = data->pending_values[0];
-    const bool has_y = data->pending_values[1];
-
-    if (has_x && cfg->codes_len > 0) {
-        input_report(dev, cfg->type, cfg->codes[0], data->pending_values[0], !has_y || cfg->codes_len < 2, K_NO_WAIT);
+    if (cfg->codes_len % 2 != 0) {
+        return -1;
     }
 
-    if (has_y && cfg->codes_len > 1) {
-        input_report(dev, cfg->type, cfg->codes[1], data->pending_values[1], true, K_NO_WAIT);
+    int8_t ready = -1;
+    for (int i = start == -1 ? 0 : (start + 1) * 2; i < cfg->codes_len; i += 2) {
+        const uint8_t pair = i / 2;
+        if ((data->pending_values[i] && data->pending_values[i + 1]) ||
+            (now - data->last_rpt[pair] >= timeout_ms && (data->pending_values[i] || data->pending_values[i + 1]))) {
+            ready = pair;
+            break;
+        }
     }
 
-    for (int i = 0; i < cfg->codes_len; i++) {
-        data->pending_values[i] = 0;
-    }
+    return ready;
+}
 
-    data->last_rpt = now;
+static void zip_rp_apply_rotation(const struct device *dev) {
+    const struct zip_rp_config *cfg = dev->config;
+    const uint32_t now = k_uptime_get_32();
+    struct zip_rp_data *data = dev->data;
+
+    int8_t pair_index = -1;
+    while ((pair_index = pair_ready(dev, pair_index)) != -1) {
+        const uint8_t value_index = pair_index * 2;
+
+        const float x_val = (float) data->pending_values[value_index] + data->remainders[value_index];
+        const float y_val = (float) data->pending_values[value_index + 1] + data->remainders[value_index + 1];
+
+        const float rotated_x_raw = x_val * data->cos_angle - y_val * data->sin_angle;
+        const float rotated_y_raw = x_val * data->sin_angle + y_val * data->cos_angle;
+
+        data->pending_values[value_index] = (int32_t) rotated_x_raw;
+        data->remainders[value_index] = rotated_x_raw - (float) data->pending_values[value_index];
+
+        data->pending_values[value_index + 1] = (int32_t) rotated_y_raw;
+        data->remainders[value_index + 1] = rotated_y_raw - (float) data->pending_values[value_index + 1];
+
+        const bool has_x = data->pending_values[value_index];
+        const bool has_y = data->pending_values[value_index + 1];
+
+        if (has_x) {
+            input_report(dev, cfg->type, cfg->codes[value_index], data->pending_values[value_index], !has_y, K_NO_WAIT);
+        }
+
+        if (has_y) {
+            input_report(dev, cfg->type, cfg->codes[value_index + 1], data->pending_values[value_index + 1], true, K_NO_WAIT);
+        }
+
+        if (has_x || has_y) {
+            data->last_rpt[pair_index] = now;
+            data->pending_values[value_index] = 0;
+            data->pending_values[value_index + 1] = 0;
+        }
+    }
 }
 
 static void zip_rp_timeout_handler(struct k_work *work) {
@@ -105,15 +127,12 @@ static void zip_rp_timeout_handler(struct k_work *work) {
     const struct device *dev = data->dev;
 
     zip_rp_apply_rotation(dev);
-    report_values(dev);
 }
 
 static int zip_rp_handle_event(const struct device *dev, struct input_event *event, 
-                                uint32_t param1, uint32_t param2, 
-                                struct zmk_input_processor_state *state) {
+                                uint32_t param1, uint32_t param2, struct zmk_input_processor_state *state) {
     const struct zip_rp_config *cfg = dev->config;
     struct zip_rp_data *data = dev->data;
-    const uint32_t now = k_uptime_get_32();
 
     if (cfg->angle == 0) {
         return ZMK_INPUT_PROC_CONTINUE;
@@ -123,7 +142,7 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
         return ZMK_INPUT_PROC_CONTINUE;
     }
 
-    int code_index = -1;
+    int8_t code_index = -1;
     for (int i = 0; i < cfg->codes_len; i++) {
         if (cfg->codes[i] == event->code) {
             code_index = i;
@@ -136,31 +155,16 @@ static int zip_rp_handle_event(const struct device *dev, struct input_event *eve
     }
 
     data->pending_values[code_index] += event->value;
-
-    const uint16_t timeout_ms = ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS);
-    if (now - data->last_rpt < timeout_ms) {
-        k_work_cancel_delayable(&data->timeout_work);
-        k_work_reschedule(&data->timeout_work, K_MSEC(timeout_ms));
-        return ZMK_INPUT_PROC_STOP;
-    }
+    event->value = 0;
 
     k_work_cancel_delayable(&data->timeout_work);
 
-    bool all_present = true;
-    for (int i = 0; i < cfg->codes_len; i++) {
-        if (!data->pending_values[i]) {
-            all_present = false;
-            break;
-        }
-    }
-
-    if (all_present) {
+    if (pair_ready(dev, code_index / 2 - 1) != -1) {
         zip_rp_apply_rotation(dev);
-        report_values(dev);
         return ZMK_INPUT_PROC_STOP;
     }
 
-    k_work_reschedule(&data->timeout_work, K_MSEC(timeout_ms));
+    k_work_reschedule(&data->timeout_work, K_MSEC(ZRC_GET("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS)));
     return ZMK_INPUT_PROC_STOP;
 }
 
@@ -260,7 +264,6 @@ int rp_set_angle_by_name(const char *name, const int16_t angle) {
     struct zip_rp_config *config = (struct zip_rp_config *)dev->config;
     config->angle = angle;
     zip_rp_update_angle(dev, angle);
-
     save_angle_to_nvs(dev, angle);
 
     LOG_DBG("Set angle for %s: %d → %d", name, config->angle, angle);
@@ -323,7 +326,7 @@ DT_INST_FOREACH_STATUS_OKAY(RP_INST)
 
 #if IS_ENABLED(CONFIG_ZMK_RUNTIME_CONFIG)
 static int zip_rp_register_runtime_params(void) {
-    zrc_register("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS, 1, 64);
+    zrc_register("rp/timeout_ms", CONFIG_ZMK_INPUT_PROCESSOR_ROTATE_PLANE_TIMEOUT_MS, 0, 12);
     return 0;
 }
 SYS_INIT(zip_rp_register_runtime_params, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
